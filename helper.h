@@ -7,7 +7,7 @@
 
 #define WARMUP_QUERIES 100000000
 
-// #define VERBOSE 0
+#define VERBOSE 0
 
 #define MARK_SIZE 16
 // #define LOG_BASE_ONES_PER_SLOT 14
