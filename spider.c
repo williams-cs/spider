@@ -1,11 +1,13 @@
 // use aligned malloc
 #include <stdio.h>
+#include <string.h>
 #include <stdint.h>
 #include <assert.h>
 #include <time.h>
 #include <stdlib.h>
 #include <x86intrin.h>
 #include "helper.h"
+#include "speedtest.h"
 
 // SECTION - Basic Block Queries
 static inline uint64_t rank_512(uint64_t *bits, uint64_t curr_uint, uint64_t nbits) {
@@ -119,12 +121,10 @@ int main(int argc, char *argv[]) {
     }
 
     clock_t b_start = clock();
-    bit_meta pack = modify_package_byte_file(argv[1], atoll(argv[2]), 4);
+    bit_meta pack = read_and_build_rank(argv[1], atoll(argv[2]), 4);
     uint64_t total_size = (pack.num_elements * 64) - pack.nbits + (pack.l0_size * 64);
-    correctness_meta tester = {};
 
-
-    if (argv[3][0] == 's' || argv[3][0] == 'd' || argv[3][0] == 'q') {
+    if (argv[3][0] == 's' || strcmp(argv[3], "qs") == 0) {
 
         total_size += build_select_from_modified(pack);
     }
@@ -137,22 +137,10 @@ int main(int argc, char *argv[]) {
 
     switch(argv[3][0]) {
         case 'r':
-            fp_speed_test(&rank, WARMUP_QUERIES, pack.nbits);
+            fp_speed_test(&rank, WARMUP_QUERIES, pack.nbits, 0);
             break;
         case 's':
-            fp_speed_test(&select_hl, WARMUP_QUERIES, pack.num_ones);
-            break;
-        
-        case 'c':
-            printf("Running Rank Correctness:\n");
-            tester = package_byte_file_for_correctness(argv[1], atoll(argv[2]));
-            fp_correct_test(&rank, tester, 100000000000lu, 1);
-            break;
-
-        case 'd':
-            printf("Running Select Correctness:\n");
-            tester = package_byte_file_for_correctness(argv[1], atoll(argv[2]));
-            fp_correct_test(&select_hl, tester, 100000000000lu, 0);
+            fp_speed_test(&select_hl, WARMUP_QUERIES, pack.num_ones, 1);
             break;
 
         case 'q':
@@ -204,7 +192,7 @@ int main(int argc, char *argv[]) {
 
 
             break;
-        case '?':
+        default:
             help();
             break;
     }
