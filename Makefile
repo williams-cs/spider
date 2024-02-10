@@ -3,26 +3,19 @@ CFLAGS = -g -march=native -mpopcnt
 FAST = -O9 -march=native -mpopcnt -mlzcnt
 
 # all: rank select
-all: spider spider64 spider-non64 spider-non16
+all: spider spider1L ni-spider ni-spider2L
 
 spider: spider.c helper.h
 	$(CC) $(FAST) spider.c helper.h -o spider
 
-spider64: spider-64-select.c helper.h
-	$(CC) $(FAST) spider-64-select.c helper.h -o spider64
+spider1L: spider-1L-select.c helper.h
+	$(CC) $(FAST) spider-1L-select.c helper.h -o spider1L
 
-spider-exact: spider-exact.c
-	$(CC) $(FAST) spider-exact.c -o spider-exact
+ni-spider: ni-spider.c
+	$(CC) $(FAST) ni-spider.c -o ni-spider
 
-
-debug: spider.c helper.h
-	$(CC) $(CFLAGS) spider.c helper.h -o spider-debug
-
-spider-non64: spider-non64.c
-	$(CC) $(FAST) spider-non64.c -o spider-non64
-
-spider-non16: spider-non16.c
-	$(CC) $(FAST) spider-non16.c -o spider-non16
+ni-spider2L: ni-spider-2L-select.c
+	$(CC) $(FAST) ni-spider-2L-select.c -o ni-spider2L
 
 clean:
-	rm spider spider64 spider-non64 spider-non16
+	rm spider spider1L ni-spider ni-spider2L

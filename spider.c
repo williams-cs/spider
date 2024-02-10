@@ -10,9 +10,9 @@
 // SECTION - Basic Block Queries
 static inline uint64_t rank_512(uint64_t *bits, uint64_t curr_uint, uint64_t nbits) {
     uint64_t last_uint = (nbits) / 64llu;
-
     uint64_t pop_val = 0;
     uint64_t final;
+    
     if ((last_uint)) {
 
         pop_val += __builtin_popcountll(bits[curr_uint] & BIT_MASK);
@@ -114,7 +114,7 @@ static inline uint64_t select_hl(uint64_t ones) {
 int main(int argc, char *argv[]) {
     uint64_t query;
 
-    if (argc < 4) {
+    if (argc < 3) {
         help();
     }
 
