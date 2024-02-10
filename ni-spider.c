@@ -7,22 +7,10 @@
 #include <x86intrin.h>
 
 #define WARMUP_QUERIES 100000000
-
-
-// 512 = 0
-// 1024 = 1
-// 2048 = 2
-// 4096 = 3
-// #define PARAM 3
-// #define VERBOSE 0
-
-// #define LOG_ONES_PER_SLOT (9 + PARAM)
-// #define ONES_PER_SLOT (1lu << LOG_ONES_PER_SLOT)
 #define SUPERBLOCK_SIZE 65536
 #define BASICBLOCK_SIZE 512
 
-// uint64_t up = 0;
-// uint64_t down = 0;
+#define VERBOSE
 
 uint64_t* bit_a;
 uint64_t *l0_a;
@@ -33,13 +21,6 @@ uint64_t* select_a;
 
 uint64_t log_ones_per_slot;
 uint64_t ones_per_slot;
-
-// 512 = 0
-// 1024 = 1
-// 2048 = 2
-// 4096 = 3
-
-
 
 typedef struct metadata {
    uint64_t* bit_array;
@@ -83,19 +64,12 @@ meta64 safe_package_byte_file(char* filename, uint64_t file_size) {
 
 
    meta64 metadata_to_send = {};
-
-   //allocate memory for the metadata array
-   uint64_t current_length = sizeof(uint64_t);
-   uint64_t* metadata_array = (uint64_t*)malloc(current_length);
+   
+    uint64_t* metadata_array = (uint64_t*)malloc((size / 64) * sizeof(uint64_t));
 
    uint64_t num_elements = 0;
    uint64_t block;
    unsigned char byte;
-   // FILE* byte_file;
-
-   // byte_file = fopen (filename, "rb");
-
-   int test = 1; 
 
    for (uint64_t j = 0; j < ((size - 1) / 64) + 1; j++) {
       block = 0;
@@ -105,33 +79,13 @@ meta64 safe_package_byte_file(char* filename, uint64_t file_size) {
 
          block = block << 8;
          byte = fgetc(byte_file);
-         if(test) {
-            // printf("%x\n", byte);
-            test = 0;
-         }
          block |= byte;
          
       }
-      // cast to int64_t so it can be signed (doesn't change the bits)
-      // if ((int64_t)block == EOF) {
-      //    break;
-      // }
       
       metadata_array[num_elements] = block;
       num_elements++;
-
-      // doubles the length of the metadata array, allocates more space to it
-      if(num_elements == current_length / sizeof(uint64_t)) {
-         current_length *= 2;
-         
-         // we want buffer in case of realloc errors
-         uint64_t* buffer = (uint64_t*)realloc(metadata_array, current_length);
-         if (buffer == NULL) {
-
-            perror("realloc error");
-         }
-         metadata_array = buffer;
-      }
+    
    }
 
    metadata_to_send.nbits = size;
@@ -143,15 +97,11 @@ meta64 safe_package_byte_file(char* filename, uint64_t file_size) {
     int base_log_ones_per_slot = 14;
     uint64_t base_ones_per_slot = 1 << base_log_ones_per_slot;
     uint64_t rough_ones_per_slot = (uint64_t)(base_ones_per_slot * ((double)total_count / (double)(num_elements * 64)) * 0.99);
-    // printf("ratL %ld\n", (uint64_t)((double)(num_elements * 64) / (double)total_count ));
     log_ones_per_slot = (64 - __builtin_clzll(rough_ones_per_slot));
     double sparcity = (double)total_count / (double)(num_elements * 64) * 0.99;
-    // printf("Sparcity: %lf\n", sparcity);
-    // printf("log ones per slot: %ld\n", log_ones_per_slot);
     ones_per_slot = 1lu << log_ones_per_slot;
 
-   metadata_to_send.float_ratio = ((double)(num_elements * 64) / (double)total_count) / (double)SUPERBLOCK_SIZE;
-   // printf("%lf\n", metadata_to_send.float_ratio);
+    metadata_to_send.float_ratio = ((double)(num_elements * 64) / (double)total_count) / (double)SUPERBLOCK_SIZE;
    
 
    metadata_to_send.num_ones =total_count;
@@ -161,12 +111,7 @@ meta64 safe_package_byte_file(char* filename, uint64_t file_size) {
    return metadata_to_send;
 }
 
-// double float_ratio;
-// uint64_t log_hl_select_width;
-
 static inline uint64_t pdep_select64(uint64_t x, unsigned n) {
-    // printf("%lld\n",_lzcnt_u64(_pdep_u64(1lu << (__builtin_popcountll(x) - n), x)));
-
     return _lzcnt_u64(_pdep_u64(1lu << (__builtin_popcountll(x) - n), x));
 }
 
@@ -255,7 +200,6 @@ int build_select(meta64 data) {
             next = __builtin_popcountll(curr_uint);
 
             if (next + ones_in_sma_block < ones_per_slot) {
-            // position += 64;
                 ones_in_sma_block += next;
             } else {
                 uint64_t ones_left = ones_per_slot - ones_in_sma_block;
@@ -264,7 +208,6 @@ int build_select(meta64 data) {
                 select_a[sma_index] = block_select + position;
                 sma_index++;
                 ones_in_sma_block = next - ones_left;
-                // position += 64;
             }   
 
 
@@ -311,94 +254,38 @@ static inline uint64_t select_512(uint64_t starting_offset, uint64_t ones) {
 }
 
 //SECTION - Quieries
-// uint64_t rank(uint64_t pos) {
-//     uint64_t section = pos / 496;
-//     uint64_t l0_i = section >> 7;
-//     uint64_t start = section << 3;
-
-//     return l0_a[l0_i] + ((mod_a[start] & MARK_MASK) >> 48) + rank_512(mod_a, start, (pos - (section * 496)) + 16);
-// }
 
 uint64_t rank(uint64_t pos) {
     uint64_t l0_i = pos >> 16;
     uint64_t l1_i = pos >> 9;
     uint64_t start = l1_i << 3;
     uint64_t so_far = l0_a[l0_i] + l1_a[l1_i];
-    // printf("%lu\n", pos - so_far);
-
     return so_far + rank_512(bit_a, start, pos - (l1_i * BASICBLOCK_SIZE));
 }
 
-// uint64_t miss = 0;
-// uint64_t num_q = 0;
-
 uint64_t select_hl(uint64_t ones) {
-    // TODO FIX
-    // uint64_t l0_guess = (select_a[(ones >> LOG_ONES_PER_SLOT)] + 32768) / SUPERBLOCK_SIZE;
-    // printf("l0g: %lu\n", l0_guess);
-
-    // while (ones <= l0_a[l0_guess]) {
-    //     // up++;
-    //     l0_guess--;
-    // }
-
-    // while (ones > l0_a[l0_guess + 1]) {
-    //     // down++;
-
-    //     l0_guess++;
-    // }
 
     uint64_t l0_guess = select_a[ones >> log_ones_per_slot] / SUPERBLOCK_SIZE;
-    // printf("%lu\n", l0_guess);
-
-    //     while (ones <= l0_a[l0_guess]) {
-    //     up++;
-    //     l0_guess--;
-    // }
-
-    // while (ones > l0_a[l0_guess + 1]) {
-    //     down++;
-
-    //     l0_guess++;
-    // }
-    // printf("%lu\n", up + down);
 
     uint64_t select_i = (ones - 1) >> log_ones_per_slot;
 
     uint64_t s_curr = select_a[select_i]; 
     uint64_t s_next = select_a[select_i + 1];
 
-    // handles the case if our select array spans 2 superblocks
-    // must handle if the target is in the first superblock and if it is second
-    // if (s_next < s_curr) {
-        
-    //     if ((l0_a[l0_guess] >> LOG_ONES_PER_SLOT) == select_i) {
-    //         s_curr = 0;
-
-    //     } else {
-    //         s_next += SUPERBLOCK_SIZE;
-    //     }
-    // }
-
-    // uint64_t basic_guess = ((((ones - ((select_i * ones_per_slot))) * (s_next - s_curr)) >> log_ones_per_slot) + 256) / 512;
-    // uint64_t curr512_i = ((s_curr) / 512) + (basic_guess);
-
     uint64_t curr512_i = ((((ones - ((select_i * ones_per_slot))) * (s_next - s_curr)) >> log_ones_per_slot) + s_curr) >> 9;
     
 
     while (ones <= ((l1_a[curr512_i]) + l0_a[curr512_i >> 7])) {
-        // miss++;
+
         curr512_i--;
     }
 
     while (ones > (l1_a[(curr512_i + 1)] + l0_a[(curr512_i + 1) >> 7])) {
-        // miss++;
+
         curr512_i++;
     }
 
     return (curr512_i * 512) + select_512(curr512_i * 8, ones - ((l1_a[curr512_i]) + l0_a[curr512_i >> 7]));
-
-    
 }
 
 //!SECTION
@@ -430,13 +317,13 @@ int rank_speed_test(uint64_t num_queries, uint64_t nbits) {
         numbers1[i] = my_rand;
     }
     volatile uint64_t result;
-    // warmup'
+    // WARMUP
     for (int i = 0; i < WARMUP_QUERIES; i++) 
         result = rank(numbers[i]);
     
 
     start = clock();
-
+    // TEST
     for (int i = 0; i < num_queries; i++) 
         result = rank(numbers1[i]);
 
@@ -497,11 +384,10 @@ int hl_select_speed_test(uint64_t num_queries, uint64_t num_ones) {
 //!SECTION
 
 //SECTION - Correctness tests
+
 // cumulative test for rank: performs rank queries from 0 to end
 int cumm_rank_test(meta64 byte_file, uint64_t end) {
-    // count of every 1 seen up to current index (stored in position)
     uint64_t count = 0;
-    // current index
     uint64_t position = 0;
 
     // iterate through every uint in file:
@@ -510,9 +396,6 @@ int cumm_rank_test(meta64 byte_file, uint64_t end) {
         for (int j = 63; j >= 0; j--) {
             count += !!(byte_file.bit_array[i] & (1lu << j));
 
-            // if (position % 10000 == 0) {
-            //     printf("Query: %lu\n", position);
-            // }
             // check that manual count is equal to our rank query program
             if (count != rank(position)) {
                 printf("Query: %lu\n", position);
@@ -524,12 +407,12 @@ int cumm_rank_test(meta64 byte_file, uint64_t end) {
             position++;
             end--;
             if (end == 0) {
-                printf("CLEAN\n");
+                printf("All Queries are Correct\n");
                 return 0;
             }
         }
     }
-    printf("CLEAN\n");
+    printf("All Queries are Correct\n");
     return 0;
 }
 
@@ -542,9 +425,6 @@ uint64_t cumm_select_test_hl(meta64 byte_file, uint64_t end) {
       for (int j = 63; j >= 0; j--) {
         if (!!(byte_file.bit_array[i] & (1lu << j))) {
             count++;
-            if (count % 1000000 == 0) {
-            //    printf("Query: %lu\n", count);
-            }
 
             if (position != select_hl(count)) {
                 printf("Query: %lu\n", count);
@@ -558,13 +438,13 @@ uint64_t cumm_select_test_hl(meta64 byte_file, uint64_t end) {
         position++;
         end--;
         if (!end) {
-            printf("CLEAN\n");
+            printf("All Queries are Correct\n");
 
             return 0;
         }
       }
    }
-   printf("CLEAN\n");
+   printf("All Queries are Correct\n");
    return 1;
 }
 
@@ -572,46 +452,28 @@ uint64_t cumm_select_test_hl(meta64 byte_file, uint64_t end) {
 
 
 int help() {
-    printf("TODO\n");
+    printf("Usage: ./ni-spider <bitfile> <numbits> <r/s>\n");
     exit(-1);
 }
 
 //SECTION - Main
 int main(int argc, char *argv[]) {
+    uint64_t query;
     clock_t b_start = clock();
     meta64 bit_data = safe_package_byte_file(argv[1], atoll(argv[2]));
     bit_a = bit_data.bit_array;
-    // double float_ratio = ((double)(bit_data.num_elements * 64) / (double)bit_data.num_ones) / (double)SUPERBLOCK_SIZE;
-    // log_hl_select_width = (64 - __builtin_clzll((uint64_t)(1 / float_ratio))) - 1;
     uint64_t total_size = build_rank(bit_data);
-    // printf("Rank Size: %lf\n", (total_size * 100) /  (double)(bit_data.nbits));
-
-
-
     
-
     if (argv[3][0] == 's' || argv[3][0] == 'd') {
-        total_size += + build_select(bit_data);
+        total_size += build_select(bit_data);
     }
 
     clock_t b_end = clock();
     #ifndef VERBOSE
-        // printf("Param: %u\n", PARAM);
         printf("%lf\n", (double)(b_end - b_start) / (double)CLOCKS_PER_SEC);
         printf("Percent size: %lf\n", ((double)total_size * 100) / (double)(bit_data.nbits));
-        // printf("Run Time: ");
     #endif
-	// printf("%lf\n", (double)(b_end - b_start) / (double)CLOCKS_PER_SEC);
-	// printf("%lf\n", ((double)total_size * 100) / (double)(bit_data.nbits));
-    // rank_speed_test(WARMUP_QUERIES, bit_data.nbits);
-            // cumm_select_test_hl(bit_data, 100000000000lu);
-    // cumm_select_test_hl(bit_data, 100000000000lu);
-
-    // cumm_rank_test(bit_data, 100000000000lu);
-    // for (int i = 0; i < 10; i++) {
-    //     printf("%lu\n", select_a[i]);
-        
-    // }
+    
     if (argc != 4) {
         help();
     }
@@ -622,8 +484,6 @@ int main(int argc, char *argv[]) {
             break;
         case 's':
             hl_select_speed_test(WARMUP_QUERIES, bit_data.num_ones);
-            // printf("Miss:%lf\n", (double)miss / (WARMUP_QUERIES * 2));
-            // hlrd_select_speed_test(WARMUP_QUERIES, pack.num_ones);
             break;
         case 'c':
             printf("%s\n", argv[1]);
@@ -634,12 +494,61 @@ int main(int argc, char *argv[]) {
             cumm_select_test_hl(bit_data, 100000000000lu);
             
             break;
+        case 'q':
 
+            if (argv[3][1] == 'r') {
+                printf("Rank Query on Range: 0-%ld\n", bit_data.nbits - 1);
+                printf("Enter Query or -1 to quit: ");
+                if (scanf("%ld", &query) < 1) {
+                    printf("Must provide a number\n");
+                }
+                while (query != -1) {
+                    if (query < 0 || query >= bit_data.nbits) {
+                        printf("Query out of Range\n");
+                    } else {
+                        printf("Rank(%ld) = %ld\n", query, rank(query));
+
+                    }
+                    printf("Enter Query or -1 to quit: ");
+                    if (scanf("%ld", &query) < 1) {
+                        printf("\nERROR: Must provide a number\n");
+                        exit(-1);
+
+                    }
+                }
+
+            }
+        
+            if (argv[3][1] == 's') {
+                build_select(bit_data);
+                printf("Select Query on Range: 1-%ld\n", bit_data.num_ones);
+                printf("Enter Query or -1 to quit: ");
+                if (scanf("%ld", &query) < 1) {
+                    printf("Must provide a number\n");
+                }
+                while (query != -1) {
+                    if (query < 1 || query > bit_data.num_ones) {
+                        printf("Query out of Range\n");
+                    } else {
+                        printf("%ld\n", query);
+                        printf("Select(%ld) = %ld\n", query, select_hl(query));
+
+                    }
+                    printf("Enter Query or -1 to quit: ");
+                    if (scanf("%ld", &query) < 1) {
+                        printf("\nERROR: Must provide a number\n");
+                        exit(-1);
+
+                    }
+                }
+            }
+
+
+            break;
         case '?':
             help();
             break;
     }
-    // printf("up: %lu, down: %lu\n", up , down);
 
     free(bit_a);
     free(select_a);

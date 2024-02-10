@@ -10,8 +10,6 @@
 #define VERBOSE 0
 
 #define MARK_SIZE 16
-// #define LOG_BASE_ONES_PER_SLOT 14
-// #define BASE_ONES_PER_SLOT (1lu << LOG_BASE_ONES_PER_SLOT)
 #define SUPERBLOCK_SIZE 63488
 #define HALF_SUPERBLOCK_SIZE 31744
 #define MARK_MASK 0xffff000000000000lu
@@ -84,7 +82,6 @@ bit_meta modify_package_byte_file(char* filename, uint64_t file_size, int log_sm
     }
 
     uint64_t array_length = ((size -1) / 62 + 1);
-    // printf("al: %ld\n", array_length + 8);
     modified_bit_array = (uint64_t*)aligned_alloc(512, (array_length + 8) * sizeof(uint64_t));
     uint64_t num_elements = 0;
     uint64_t block;
@@ -101,7 +98,7 @@ bit_meta modify_package_byte_file(char* filename, uint64_t file_size, int log_sm
         int adjust = 0;
     
         if (j % 1024 == 0) {
-            // printf("%lu\n", l0_i);
+
             l0_a[l0_i] = total_count;
             l0_i++;
             relative_count = 0;
@@ -121,12 +118,7 @@ bit_meta modify_package_byte_file(char* filename, uint64_t file_size, int log_sm
             num_bits_read += 8;
             if (num_bits_read <= size) {
                 block |= byte;
-
-                // break;
             }
-            
-                // printf("%ld\n", num_bits_read);
-            // this gets some of the EOF at the end when we don't line up
       
         }
 
@@ -140,7 +132,6 @@ bit_meta modify_package_byte_file(char* filename, uint64_t file_size, int log_sm
 
     // needs to be 8 because we look 8 in the future
     for (int i = num_elements; i < num_elements + 8; i++) {
-        // is this weird...? idk
         modified_bit_array[i] = -1;
     }
     num_elements += 8;
@@ -156,11 +147,7 @@ bit_meta modify_package_byte_file(char* filename, uint64_t file_size, int log_sm
     double sparcity = ((double)total_count / (double)(num_bits)) * 0.99;
 
     uint64_t rough_ones_per_slot = (uint64_t)(base_ones_per_slot * sparcity);
-    // printf("ratL %ld\n", (uint64_t)((double)(num_elements * 64) / (double)total_count ));
     log_ones_per_slot = (64 - __builtin_clzll(rough_ones_per_slot));
-    // printf("log ones per hl slot: %ld\n", log_hl_select_width);
-    // printf("log ones per slot: %ld\n", log_ones_per_slot);
-    // printf("Sparcity: %lf\n", (double)total_count / (double)(num_bits));
     ones_per_slot = 1lu << log_ones_per_slot;
     l0_a[l0_i] = l0_a[l0_i - 1] + (uint64_t)(SUPERBLOCK_SIZE / (metadata_to_send.float_ratio * SUPERBLOCK_SIZE));
 
@@ -169,10 +156,6 @@ bit_meta modify_package_byte_file(char* filename, uint64_t file_size, int log_sm
     // this is number of 64 bit uints blocks
     metadata_to_send.num_elements = num_elements;
     metadata_to_send.nbits = size;
-
-    // printf("%ld, %ld, %ld, %ld\n", size, num_elements, total_count, l0_i);
-
-
 
     return metadata_to_send;
 }
@@ -202,17 +185,14 @@ int build_select_from_modified(bit_meta data) {
             uint64_t update = 64;
 
             if ((i % 8) == 0) {
-                // this is a modified thing
+                // this is a modified block
                 curr_uint <<= 16;
                 update = 48;
             }
             
             if (i % ((1024)) == 0) {
-            // allocate space for the next sma and zero out all
-            // the position indicators
+            // allocate space for the next sma and zero out the position indicator
             ll_position = 0;
-            // ones_in_sma_block = 0;
-            // first_one_found = 0;
         }
             if (!first_one_found) {
             
@@ -222,8 +202,8 @@ int build_select_from_modified(bit_meta data) {
 
                     continue;
                 } else {
-                    // find the position of the first one in the sma array and save its position
 
+                    // find the position of the first one in the sma array and save its position
                     uint16_t block_select = pdep_select64(curr_uint, 1);
 
                     hl_select_array[hl_sma_index] = (hl_position + block_select + HALF_SUPERBLOCK_SIZE) / SUPERBLOCK_SIZE;
@@ -246,7 +226,6 @@ int build_select_from_modified(bit_meta data) {
 
             next = __builtin_popcountll(curr_uint);
             if (next + hl_ones_in_sma_block < (1lu << log_hl_select_width)) {
-                // position += 64;
                 hl_ones_in_sma_block += next;
             } else {
                 uint64_t hl_ones_left = (1lu << log_hl_select_width) - hl_ones_in_sma_block;
@@ -255,11 +234,9 @@ int build_select_from_modified(bit_meta data) {
                 hl_select_array[hl_sma_index] = (hl_block_select + hl_position + HALF_SUPERBLOCK_SIZE) / SUPERBLOCK_SIZE;
                 hl_sma_index++;
                 hl_ones_in_sma_block = next - hl_ones_left;
-            // position += 64;
             }
 
             if (next + ll_ones_in_sma_block < ones_per_slot) {
-            // position += 64;
                 ll_ones_in_sma_block += next;
             } else {
                 uint16_t ones_left = ones_per_slot - ll_ones_in_sma_block;
@@ -268,7 +245,6 @@ int build_select_from_modified(bit_meta data) {
                 ll_select_array[ll_sma_index] = block_select + ll_position;
                 ll_sma_index++;
                 ll_ones_in_sma_block = next - ones_left;
-                // position += 64;
             }   
 
 
@@ -276,20 +252,16 @@ int build_select_from_modified(bit_meta data) {
             ll_position += update;
         }
 
-    // uint64_t hl_dummy = hl_select_array[hl_sma_index - 1];// + (total_ratio * ones_per_slot) / 512;
-    // hl_select_array[hl_sma_index] = hl_dummy + ((uint64_t)(data.float_ratio * SUPERBLOCK_SIZE) << log_hl_select_width);
     hl_select_array[hl_sma_index] = data.l0_size - 1;
-    // printf("hlsi %ld\n", hl_sma_index);
-    uint16_t ll_dummy = ll_select_array[ll_sma_index - 1];// + (total_ratio * ones_per_slot) / 512;
+
+    uint16_t ll_dummy = ll_select_array[ll_sma_index - 1];
     if ((uint64_t)(ll_dummy) + ((uint64_t)(data.float_ratio * SUPERBLOCK_SIZE) * ones_per_slot) < SUPERBLOCK_SIZE) {
         ll_select_array[ll_sma_index] = ll_dummy + ((uint64_t)(data.float_ratio * SUPERBLOCK_SIZE) * ones_per_slot);
-        // printf("what am i doing: %ld\n", ll_dummy + ((uint64_t)(data.float_ratio * SUPERBLOCK_SIZE) * ones_per_slot));
     
     } else {
         ll_select_array[ll_sma_index] = 0;
     }
 
-    // printf("%ld, %ld\n", hl_sma_index, data.num_elements * 64 / SUPERBLOCK_SIZE);
     return (hl_sma_index * 64) + (ll_sma_index * 16);
     
 }
@@ -303,11 +275,11 @@ uint64_t count_ones(correctness_meta bit_data) {
     for (int i = 0; i < bit_data.num_elements; i++) {
         count += (uint64_t) __builtin_popcountll(bit_data.bit_array[i]);
     }
-    // printf("count: %ld\n",count);
     return count;
 }
 
 // -1 find the file size manually
+// this build is only for running correctness tests and does not relate to the actual structure
 correctness_meta package_byte_file_for_correctness(char* filename, uint64_t file_size) {
    FILE* byte_file;
    uint64_t size = 0;
@@ -332,17 +304,12 @@ correctness_meta package_byte_file_for_correctness(char* filename, uint64_t file
    correctness_meta metadata_to_send = {};
 
    //allocate memory for the metadata array
-   uint64_t current_length = sizeof(uint64_t);
-   uint64_t* metadata_array = (uint64_t*)malloc(current_length);
+    uint64_t* metadata_array = (uint64_t*)malloc((size / 64) * sizeof(uint64_t));
 
    uint64_t num_elements = 0;
    uint64_t block;
    unsigned char byte;
-   // FILE* byte_file;
 
-   // byte_file = fopen (filename, "rb");
-
-   int test = 1; 
 
    for (uint64_t j = 0; j < ((size - 1) / 64) + 1; j++) {
       block = 0;
@@ -352,33 +319,12 @@ correctness_meta package_byte_file_for_correctness(char* filename, uint64_t file
 
          block = block << 8;
          byte = fgetc(byte_file);
-         if(test) {
-            // printf("%x\n", byte);
-            test = 0;
-         }
          block |= byte;
          
       }
-      // cast to int64_t so it can be signed (doesn't change the bits)
-      // if ((int64_t)block == EOF) {
-      //    break;
-      // }
       
       metadata_array[num_elements] = block;
       num_elements++;
-
-      // doubles the length of the metadata array, allocates more space to it
-      if(num_elements == current_length / sizeof(uint64_t)) {
-         current_length *= 2;
-         
-         // we want buffer in case of realloc errors
-         uint64_t* buffer = (uint64_t*)realloc(metadata_array, current_length);
-         if (buffer == NULL) {
-
-            perror("realloc error");
-         }
-         metadata_array = buffer;
-      }
    }
 
   
@@ -423,9 +369,6 @@ uint64_t fp_correct_test(FUNC_PTR fun, correctness_meta byte_file, uint64_t end,
                 }
 
             }
-        }
-        if (count % 10000000 == 0) {
-            // printf("Query: %lu\n", count);
         }
         position++;
         end--;
